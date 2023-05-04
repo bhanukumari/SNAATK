@@ -1,0 +1,137 @@
+@Library(['javahome_demo@feature']) _
+pipeline {
+    agent any
+    stages {
+        stage('clean workspace')  {
+            steps {
+              cleanWs()
+            }
+        }
+
+        stage('clone')  {
+            steps {
+                script{
+            tfsharedlibrary.clone("https://gitlab.com/snaatak/avengers-p2/devops-repos/infrastructure/infrastructure.git","feature","gitlab-token")
+                }
+            }
+        }
+
+        stage('Terraform Init') {
+            steps { 
+                dir ('env/dev/Applications/Notification'){
+                script {
+                    
+                tfsharedlibrary.terraform('init')
+                    }
+                } 
+            }
+        }
+
+        stage('Validation & Security Scanning') {
+        parallel {
+
+            stage('Terraform Validate') {
+            steps {
+                dir ('env/dev/Applications/Notification'){
+                script {    
+                tfsharedlibrary.terraform('validate')
+                    }
+                }
+            }
+        }
+        stage('Cred Scanning') {
+            steps {   
+                script {
+                try {
+                        commonsharedlibrary.Gitleaks()
+          } catch (Exception e) {
+            echo "An error occurred: ${e.getMessage()}"
+                    }
+                } 
+            }
+        }
+        stage('Security/Compliance') {
+            steps {   
+                script {
+                try {
+                        tfsharedlibrary.security("env/dev/Applications/Notification")
+          } catch (Exception e) {
+            echo "An error occurred: ${e.getMessage()}"
+                    }
+                } 
+            }
+        }
+        stage('Static Code Analysis') {
+            steps {  
+                script {
+                    dir ('env/dev/Applications/Notification'){
+                try {
+                        tfsharedlibrary.linting(allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportFiles: "tflint_report.json", reportName: "TFLint Report")
+          } catch (Exception e) {
+            echo "An error occurred: ${e.getMessage()}"
+                                }
+                            }
+                        }
+                    }
+                }           
+            }
+        }
+        stage('Plan') {
+                steps {    
+                    dir ('env/dev/Applications/Notification'){
+                    script {
+                        tfsharedlibrary.terraform('plan')
+                        }
+                    }
+                }
+            }
+
+            stage('archive') {
+            steps {
+                archiveArtifacts artifacts: '**/*.*', followSymlinks: false
+            }
+            }
+        
+        // stage('Infra Cost') {
+        //         steps {  
+        //             withEnv(['INFRACOST_API_KEY=infracost-token']){  
+        //             dir ('env/dev/Applications/Notification'){
+        //             script {
+        //                 tfsharedlibrary.infracost(allowMissing: false, alwaysLinkToLastBuild: false, reportFiles: "infracost_report.html", reportName: "Infracost Report")
+        //              }
+        //           }
+        //       }
+        //      }
+        //   }
+         stage('Infra Cost') {
+                steps {  
+                    withCredentials([string(credentialsId: 'infracost-frontend', variable: 'INFRACOST_API_KEY')]){  
+                    dir ('env/dev/Applications/Notification') {
+                    script {
+                        tfsharedlibrary.infracost(allowMissing: false, alwaysLinkToLastBuild: false, reportFiles: "infracost_report.html", reportName: "Infracost Report")
+                        }
+                    sh """
+                        echo "Location"
+                        ls -al 
+                        """
+                    }
+                }
+            }
+        }
+               stage('Trigger Another Pipeline') {
+                   steps {
+                     input 'do you want to apply this plan'
+                     build job: 'Notification-CD', wait: false
+    
+                 }
+              } 
+            }
+            post {
+             always {
+              //   junit 'env/dev/Applications/Frontend/results_junitxml.xml'
+             slackSend channel: 'slack-ot-avengers-p2', color: currentBuild.currentResult == 'SUCCESS' ? 'good' : 'danger', message: "Build Number: ${env.BUILD_NUMBER} \n Job Name: ${env.JOB_NAME} \n Build URL: ${env.BUILD_URL} \n Status: ${currentBuild.currentResult} \n User: ${env.USER}"        
+           }
+         }
+        }
+
+

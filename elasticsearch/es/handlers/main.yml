@@ -1,0 +1,4 @@
+# Start Elasticsearch
+- name: Starting Elasticsearch
+  service: name=elasticsearch state=restarted
+

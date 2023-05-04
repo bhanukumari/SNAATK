@@ -1,0 +1,150 @@
+@Library(['javahome_demo@feature']) _
+def propsValue
+pipeline {
+    agent any
+
+    stages {
+        
+        // stage('clean workspace')  {
+        //     steps {
+        //       cleanWs()
+        //     }
+        // }
+
+        stage('read variable'){
+            steps{
+                dir ('env/dev/Applications/Attendance'){
+            script{
+                // checkout scm
+                propsValue = tfsharedlibrary.properties("test.properties")
+                    }
+                }
+            }
+        }
+
+        stage('clone')  {
+            steps {
+                script{
+            tfsharedlibrary.clone("${propsValue.git_repo}","${propsValue.branch}","${propsValue.git_token}")
+                }
+            }
+        }
+
+        stage('Terraform Init') {
+            steps { 
+                dir ('env/dev/Applications/Attendance'){
+                script {
+                    
+                tfsharedlibrary.terraform('init')
+                    }
+                } 
+            }
+        }
+
+
+
+        stage('Validation & Security Scanning') {
+        parallel {
+
+            stage('Terraform Validate') {
+            steps {
+                dir ('env/dev/Applications/Attendance'){
+                script {    
+                tfsharedlibrary.terraform('validate')
+                    }
+                }
+            }
+        }
+        stage('Cred Scanning') {
+            steps {   
+                script {
+                try {
+                        commonsharedlibrary.Gitleaks()
+          } catch (Exception e) {
+            echo "An error occurred: ${e.getMessage()}"
+                    }
+                } 
+            }
+        }
+        stage('Security/Compliance') {
+            steps {   
+                script {
+                try {
+                        tfsharedlibrary.security("env/dev/Applications/Attendance")
+          } catch (Exception e) {
+            echo "An error occurred: ${e.getMessage()}"
+                    }
+                } 
+            }
+        }
+        stage('Static Code Analysis') {
+            steps {  
+                script {
+                    dir ('env/dev/Applications/Attendance'){
+                try {
+                        tfsharedlibrary.linting(allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportFiles: "tflint_report.json", reportName: "TFLint Report")
+          } catch (Exception e) {
+            echo "An error occurred: ${e.getMessage()}"
+                                }
+                            }
+                        }
+                    }
+                }           
+            }
+        }
+
+        stage('Infra Cost') {
+                steps {
+                    withCredentials([string(credentialsId: 'infracost-token', variable: 'INFRACOST_API_KEY')]){  
+                    dir ('env/dev/Applications/Attendance'){
+                    script {
+                        tfsharedlibrary.infracost(allowMissing: false, alwaysLinkToLastBuild: false, reportFiles: "infracost_report.html", reportName: "Infracost Report")
+                            }
+                        }
+                    }
+                }
+            }
+
+        stage('Plan') {
+                steps {    
+                    dir ('env/dev/Applications/Attendance'){
+                    script {
+                        tfsharedlibrary.terraform('plan')
+                        }
+                    }
+                }
+            }
+            // stage('archive') {
+            // steps {
+            //     timeout(time: 20, unit: 'SECONDS'){
+            //         input 'Do you want to deploy the Application?'
+            //         build job: 'AttendanceCD', wait: false
+            //         }
+            //     archiveArtifacts(artifacts: '**/*.*', followSymlinks: false)
+            //     }
+            // }
+
+            stage('archive') {
+            steps {
+                archiveArtifacts artifacts: '**/*.*', followSymlinks: false
+                    
+                }
+            }
+
+            stage('Trigger Another Pipeline') {
+                steps {
+                    timeout(time: 30, unit: 'SECONDS'){
+                    input 'Do you want to deploy the Application?'
+                    build job: 'Attendance-CD', wait: false
+                    }
+                }
+            }
+        }       
+    post {
+    always {
+    //   junit 'env/dev/Applications/Attendance/results_junitxml.xml'
+      slackSend channel: 'slack-ot-avengers-p2', color: currentBuild.currentResult == 'SUCCESS' ? 'good' : 'danger', message: "Build Number: ${env.BUILD_NUMBER} \n Job Name: ${env.JOB_NAME} \n Build URL: ${env.BUILD_URL} \n Status: ${currentBuild.currentResult} \n User: ${env.USER}" 
+    }
+  }
+
+}

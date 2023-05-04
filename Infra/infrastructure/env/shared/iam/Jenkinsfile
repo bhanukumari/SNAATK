@@ -1,0 +1,170 @@
+@Library(['javahome_demo@feature']) _
+pipeline {
+    agent any
+  environment { repo_url = "https://gitlab.com/snaatak/avengers-p2/devops-repos/infrastructure/infrastructure.git" 
+  }
+    tools {
+     terraform 'terraform'
+    }
+    
+
+
+    stages {
+
+        // stage('Workspace Cleanup')  {
+        //     steps {
+        //         script{
+        //             commonsharedlibrary.cleanWorkspace()
+        //         }
+        //     }
+        // }
+
+//   stage('Workspace'){
+//     steps{
+//     cleanWs()
+//     }
+// }
+
+        stage('clone')  {
+            steps {
+                script{
+            // checkout scm
+            tfsharedlibrary.clone("${repo_url}","feature","gitlab-token")
+                }
+            }
+        }
+
+// stage('read var')  {
+//             steps {
+//                 script{
+    
+//     tfsharedlibrary.properties(){
+//         filepath: 'iam/config.properties'
+//                  }
+//              }
+//         }
+// }
+
+        stage('Terraform Init') {
+            steps { 
+                dir ('env/shared/iam'){
+                script {
+                    
+                tfsharedlibrary.terraform('init')
+                    }
+                } 
+            }
+        }
+
+
+
+        stage('Validation & Security Scanning') {
+        parallel {
+
+            stage('Terraform Validate') {
+            steps {
+                dir ('env/shared/iam'){
+                script {    
+                tfsharedlibrary.terraform('validate')
+                    }
+                }
+            }
+        }
+        stage('Cred Scanning') {
+            steps {   
+                script {
+                try {
+                        commonsharedlibrary.Gitleaks()
+          } catch (Exception e) {
+            echo "An error occurred: ${e.getMessage()}"
+                    }
+                } 
+            }
+        }
+        stage('Security/Compliance') {
+            steps {   
+                script {
+                try {
+                        tfsharedlibrary.security("env/shared/iam")
+          } catch (Exception e) {
+            echo "An error occurred: ${e.getMessage()}"
+                    }
+                } 
+            }
+        }
+        stage('Static Code Analysis') {
+            steps {  
+                script {
+                    dir ('env/shared/iam'){
+                try {
+                        tfsharedlibrary.linting(allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportFiles: "tflint_report.json", reportName: "TFLint Report")
+          } catch (Exception e) {
+            echo "An error occurred: ${e.getMessage()}"
+                                }
+                            }
+                        }
+                    }
+                }           
+            }
+        }
+
+        stage('Plan') {
+                steps {    
+                    dir ('env/shared/iam'){
+                    script {
+                        tfsharedlibrary.terraform('plan')
+                        }
+                    }
+                }
+            }
+        
+        stage('Infra Cost') {
+                steps {  
+                    withEnv(['INFRACOST_API_KEY=infracost-token']){  
+                    dir ('env/shared/iam'){
+                    script {
+                        tfsharedlibrary.infracost(allowMissing: false, alwaysLinkToLastBuild: false, reportFiles: "infracost_report.html", reportName: "Infracost Report")
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Apply') {
+                steps {   
+                    dir ('env/shared/iam'){
+                    script {
+                    def USER_INPUT = input(
+                    message: 'Please select the required input',
+                    parameters: [
+                            [$class: 'ChoiceParameterDefinition',
+                             choices: ['Nothing','Apply','Destroy'].join('\n'),
+                             name: 'input',
+                             description: 'Menu - select box option']
+                    ])
+
+                    echo "The answer is: ${USER_INPUT}"
+
+                    if( "${USER_INPUT}" == "Apply"){
+                        //do something
+                        tfsharedlibrary.terraform('apply -auto-approve')
+                    } else if( "${USER_INPUT}" == "Destroy") {
+                        //do something else
+                        tfsharedlibrary.terraform('destroy -auto-approve')
+                    } else {
+                        
+                    }
+                        
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+    always {
+      junit 'iam/results_junitxml.xml'
+      slackSend channel: 'slack-ot-avengers-p2', color: currentBuild.currentResult == 'SUCCESS' ? 'good' : 'danger', message: "Build Number: ${env.BUILD_NUMBER} \n Job Name: ${env.JOB_NAME} \n Build URL: ${env.BUILD_URL} \n Status: ${currentBuild.currentResult} \n User: ${env.USER}"
+    }
+  }
+}

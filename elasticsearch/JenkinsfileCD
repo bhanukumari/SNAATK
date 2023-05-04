@@ -1,0 +1,27 @@
+@Library("javahome_demo@feature") _
+pipeline {
+    agent any
+         stages {
+
+        stage('copy artifact') {
+            steps {
+           copyArtifacts(projectName: 'AttendanceCI', fingerprintArtifacts: true, optional: true)
+            }
+        }
+         stage('apply') {
+                    steps {
+                      script{
+                    //  ansiblesharedlibraryCD.apply(ansiblePlaybook credentialsId: 'ansible-token', disableHostKeyChecking: true, installation: 'ansible', inventory: 'hosts', playbook: 'playbook.yml')
+                     ansiblePlaybook credentialsId: 'ansible-token', disableHostKeyChecking: true, installation: 'ansible', inventory: 'hosts', playbook: 'playbook.yml'
+                    }
+                    // }
+                }
+            }
+    }
+    post {
+    always {
+      slackSend channel: 'slack-ot-avengers-p2', color: currentBuild.currentResult == 'SUCCESS' ? 'good' : 'danger', message: "Build Number: ${env.BUILD_NUMBER} \n Job Name: ${env.JOB_NAME} \n Build URL: ${env.BUILD_URL} \n Status: ${currentBuild.currentResult} \n User: ${env.USER}" 
+    }
+  }
+
+}

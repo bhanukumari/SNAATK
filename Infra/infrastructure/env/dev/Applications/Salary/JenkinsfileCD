@@ -1,0 +1,52 @@
+@Library("javahome_demo@feature") _
+pipeline {
+    agent any
+         stages {
+
+        stage('copy artifact') {
+            steps {
+           copyArtifacts(projectName: 'Salary-CI', fingerprintArtifacts: true, optional: true)
+            }
+        }
+
+        stage('Apply') {
+                steps {   
+                    timeout(time: 300, unit: 'SECONDS') {
+                    dir('env/dev/Applications/Salary'){
+                    script {
+                    def USER_INPUT = input(
+                    message: 'Please select the required input',
+                    parameters: [
+                            [$class: 'ChoiceParameterDefinition',
+                             choices: ['Nothing','Apply','Destroy'].join('\n'),
+                             name: 'input',
+                             description: 'Menu - select box option']
+                    ]
+                    )
+
+                    echo "The answer is: ${USER_INPUT}"
+
+                    if( "${USER_INPUT}" == "Apply"){
+                        //do something
+                        // copyArtifacts projectName: 'Salary-CI', filter: 'tfplan', fingerprintArtifacts: true
+                        tfsharedlibrary.terraform('apply -auto-approve')
+                    } else if( "${USER_INPUT}" == "Destroy") {
+                        //do something else
+                        tfsharedlibrary.terraform('destroy -auto-approve')
+                    } else {
+                        
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    post {
+    always {
+      slackSend channel: 'slack-ot-avengers-p2', color: currentBuild.currentResult == 'SUCCESS' ? 'good' : 'danger', message: "Build Number: ${env.BUILD_NUMBER} \n Job Name: ${env.JOB_NAME} \n Build URL: ${env.BUILD_URL} \n Status: ${currentBuild.currentResult} \n User: ${env.USER}" 
+    }
+  }
+
+}
+

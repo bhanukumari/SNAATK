@@ -1,0 +1,60 @@
+@Library("javahome_demo@feature") _
+pipeline {
+    agent any
+         stages {
+        stage('copy artifact') {
+            steps {
+           copyArtifacts(projectName: 'Notification-CI', filter: '**/*', fingerprintArtifacts: true, optional: true)
+            }
+        }
+      //   stage('apply') {
+      //       steps {
+      //       dir('env/dev/Applications/Frontend'){
+      //       sh "terraform apply -auto-approve"
+      //   }
+      // }
+      stage('Apply') {
+                steps {   
+                    dir ('env/dev/Applications/Notification'){
+                    script {
+                    def USER_INPUT = input(
+                    message: 'Please select the required input',
+                    parameters: [
+                            [$class: 'ChoiceParameterDefinition',
+                             choices: ['Nothing','Apply','Destroy'].join('\n'),
+                             name: 'input',
+                             description: 'Menu - select box option']
+                    ])
+
+                    echo "The answer is: ${USER_INPUT}"
+
+                    if( "${USER_INPUT}" == "Apply"){
+                        //do something
+                        tfsharedlibrary.terraform('apply -auto-approve')
+                    } else if( "${USER_INPUT}" == "Destroy") {
+                        //do something else
+                        tfsharedlibrary.terraform('destroy -auto-approve')
+                    } else {
+                        
+                    }
+                        
+                    }
+                }
+            }
+        }
+    //     stage('rolling strategy') {
+    //          steps {
+    //          dir('env/dev/Applications/Notification'){
+    //         script {
+    //         // tfsharedlibraryCD.rolling(AutoScalingGroupName: frontend DesiredCapacity: 3 Region: us-east-2)
+           
+    //        aws autoscaling update-auto-scaling-group --auto-scaling-group-name notification-autoscaling-group --desired-capacity 4
+    //       }
+            
+    //      }
+    //    }
+    //  }
+    }
+  }
+
+

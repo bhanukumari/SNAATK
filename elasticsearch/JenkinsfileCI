@@ -1,0 +1,54 @@
+@Library(['javahome_demo@feature']) _
+pipeline {
+  agent any
+ 
+  stages {
+    stage('clone') {
+      steps {
+           script{
+           tfsharedlibrary.clone("https://gitlab.com/snaatak/avengers-p2/devops-repos/scm/roles/database/elasticsearch.git", "feature", "gitlab-token")
+           }
+      }
+    }
+    stage('Static Code Analysis') {
+                steps {  
+                    script {
+                    //  dir (''){ 
+                    try {
+                    ansiblesharedlibraryCI.linting()            
+            } catch (Exception e) {
+                echo "An error occurred: ${e.getMessage()}"
+                                    }
+                                // }
+                            }
+                        }
+                    }
+                    
+                    stage('syntax check') {
+                    steps {
+                       script{
+                    //   dir (''){
+                      ansiblesharedlibraryCI.syntaxcheck("hosts","playbook.yml")
+                    //   }
+                    }
+                }
+            }
+                    stage('Dry Run') {
+                    steps {
+                      script{
+                    ansiblesharedlibraryCI.check("hosts","playbook.yml")
+                    }
+                    // }
+                }
+            }
+             stage('Trigger Another Pipeline') {
+                steps {
+                    timeout(time: 30, unit: 'SECONDS'){
+                    input 'Do you want to deploy the Application?'
+                    build job: 'elasticsearch-CD', wait: false
+                    }
+                }
+            }
+        }
+    }
+    

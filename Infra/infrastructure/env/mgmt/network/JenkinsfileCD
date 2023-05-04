@@ -1,0 +1,42 @@
+@Library("javahome_demo@feature") _
+pipeline {
+    agent any
+         stages {
+        stage('copy artifact') {
+            steps {
+           copyArtifacts(projectName: 'mgmt-network-CI', filter: '**/*', fingerprintArtifacts: true, optional: true)
+            }
+        }
+           stage('Apply') {
+                steps {   
+                    dir('env/mgmt/network'){
+                    script {
+                    def USER_INPUT = input(
+                    message: 'Please select the required input',
+                    parameters: [
+                            [$class: 'ChoiceParameterDefinition',
+                             choices: ['Nothing','Apply','Destroy'].join('\n'),
+                             name: 'input',
+                             description: 'Menu - select box option']
+                    ])
+
+                    echo "The answer is: ${USER_INPUT}"
+
+                    if( "${USER_INPUT}" == "Apply"){
+                        //do something
+                        // copyArtifacts projectName: 'AttendanceCI', filter: 'tfplan', fingerprintArtifacts: true
+                        tfsharedlibrary.terraform('apply -auto-approve')
+                    } else if( "${USER_INPUT}" == "Destroy") {
+                        //do something else
+                        tfsharedlibrary.terraform('destroy -auto-approve')
+                    } else {
+                        
+                    }
+                }
+            
+              }
+            }
+        }
+    }
+}
+  

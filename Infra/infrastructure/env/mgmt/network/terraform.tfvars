@@ -1,0 +1,21 @@
+region               = "us-east-2"
+vpc_cidr             = "10.0.0.0/16"
+vpc_name             = "mgmt-vpc"
+subnet_az            = ["us-east-2a", "us-east-2b"]
+pub_subnet_cidr      = ["10.0.1.0/24", "10.0.2.0/24"]
+pri_subnet_cidr      = ["10.0.3.0/24", "10.0.4.0/24"]
+pub_subnet_name      = ["mgmt-public-subnet-1", "mgmt-public-subnet-2"]
+pri_subnet_name      = ["mgmt-subnet-1", "mgmt-subnet-2"]
+public_rt_name       = "mgmt-public-rt"
+private_rt_name      = "mgmt-private-rt"
+igw_name             = "mgmt-igw"
+enable_vpc_logs      = true
+vpc_flow_log_s3_name = "mgmt-avenger-snaatak-p2"
+vpc-flow-logs-role ="mgmt-vpc-flow-logs-role"
+//************************************************************
+# ami           = "ami-06c4532923d4ba1ec"
+# instance_type = "t2.micro"
+# key_name      = "Terraform"
+# tenancy       = "default"
+# instance_tag  = "es-Service"
+# # subnet_id = 
